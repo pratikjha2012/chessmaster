@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chess Puzzles</title>
+<style>
+body {
+  margin:0; font-family:'Arial', sans-serif; background:linear-gradient(135deg,#1a1a2e,#0f0f1f); color:#fff;
+  display:flex; flex-direction:column; align-items:center; padding:20px; min-height:100vh;
+}
+h1{margin-bottom:20px;text-align:center;}
+.board {
+  display:grid; grid-template-columns:repeat(8,60px); grid-template-rows:repeat(8,60px);
+  width:480px; height:480px; border:4px solid #ff9800; border-radius:8px; overflow:hidden; margin-bottom:20px;
+}
+.square{
+  display:flex; align-items:center; justify-content:center; font-size:36px; cursor:pointer;
+  width:100%; height:100%;
+}
+.light{background:#f0d9b5; color:#000;}
+.dark{background:#b58863; color:#000;}
+.square.selected{outline:3px solid rgba(59,130,246,.95); outline-offset:-3px;}
+.square.move{box-shadow:inset 0 0 0 6px rgba(0,0,0,.2); border-radius:50%;}
+.square.capture{box-shadow:inset 0 0 0 6px rgba(239,68,68,.5); border-radius:50%;}
+.controls{display:flex; gap:10px; margin-bottom:20px; align-items:center;}
+button, select{padding:8px 12px; border:none; border-radius:6px; cursor:pointer; background:#ff5722; color:#fff; transition:0.2s;}
+button:hover, select:hover{background:#e64a19;}
+#status{margin-top:10px; font-weight:bold; text-align:center;}
+</style>
+</head>
+<body>
+<h1>Chess Puzzles</h1>
+
+<div class="controls">
+  <label style="color:#fff;">Difficulty: </label>
+  <select id="difficulty">
+    <option value="easy">Mate in 1</option>
+    <option value="medium">Mate in 2</option>
+    <option value="hard">Tactical</option>
+  </select>
+  <button id="newPuzzle">New Puzzle</button>
+  <button id="resetPuzzle">Reset</button>
+</div>
+
+<div class="board" id="board"></div>
+<div id="status">Loading...</div>
+
+<script src="chess.js"></script>
+<script>
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const difficultyEl = document.getElementById('difficulty');
+
+let chess = new Chess();
+let selectedSquare = null;
+let solutionMoves = [];
+let currentPuzzleFEN = "";
+
+// Assume puzzles specify which side is the player
+
+// Unicode pieces
+const whitePieces={p:'♙',r:'♖',n:'♘',b:'♗',q:'♕',k:'♔'};
+const blackPieces={p:'♟',r:'♜',n:'♞',b:'♝',q:'♛',k:'♚'};
+
+// ======================
+// 1️⃣ Add your puzzles here
+// ======================
+// Each puzzle: {fen: "FEN string", solution: [{from:"e2", to:"e4"}, ...], difficulty: "easy/medium/hard"}
+// The order of solution moves can alternate between player and computer
+const puzles = [
+  {
+    fen: "7r/2p1kp1p/p3p3/1p6/3P1q2/8/PP4KP/R7 - - 1 25",
+    solution: [{from:"h8", to:"g8"}],
+    difficulty:"easy",
+    playerColor:"b"
+  },
+  {
+    fen: "7r/2p1kp1p/p3p3/1p6/3P1q2/8/PP4KP/R7 b - - 1 25",
+    solution: [
+      {from:"h8", to:"g8"},   // computer’s move
+      {from:"g2", to:"h3"}    // player’s move
+    ],
+    difficulty:"medium",
+    playerColor:"b"
+  }
+];
+
+let playerColor = "b"; // default
+
+function onSquareClick(square){
+  if(chess.game_over()) return;
+
+  if(selectedSquare){
+    const legal = chess.moves({square:selectedSquare,verbose:true}).some(m=>m.to===square);
+    if(legal){
+      const move = chess.move({from:selectedSquare,to:square,promotion:'q'});
+      selectedSquare=null;
+      renderBoard();
+
+      if(solutionMoves.length>0){
+        const expected = solutionMoves[0];
+        if(move.from===expected.from && move.to===expected.to){
+          solutionMoves.shift();
+          statusEl.textContent = solutionMoves.length===0 ? "✅ Puzzle solved!" : "Good! Next move...";
+
+          // 🔥 Auto-play computer moves whenever it’s not player’s turn
+          while(solutionMoves.length>0 && chess.turn()!==playerColor){
+            const compMove = solutionMoves.shift();
+            chess.move({from:compMove.from,to:compMove.to,promotion:'q'});
+            renderBoard();
+            statusEl.textContent = solutionMoves.length===0 ? "✅ Puzzle solved!" : "Your turn...";
+          }
+
+        } else {
+          statusEl.textContent="❌ Incorrect move, try again.";
+          chess.undo();
+        }
+      }
+      return;
+    }
+  }
+
+  const moves=chess.moves({square,verbose:true});
+  if(moves.length && moves[0].color===chess.turn()){
+    selectedSquare=square;
+    highlightMoves(selectedSquare);
+  }
+}
+
+function generatePuzzle(){
+  const difficulty=difficultyEl.value;
+  const filtered=puzzles.filter(p=>p.difficulty===difficulty);
+  if(filtered.length===0){ statusEl.textContent="No puzzles for this difficulty"; return; }
+  const puzzle=filtered[Math.floor(Math.random()*filtered.length)];
+  currentPuzzleFEN=puzzle.fen;
+  chess.load(puzzle.fen);
+  solutionMoves=puzzle.solution.slice();
+  playerColor=puzzle.playerColor || "w"; // default white
+  renderBoard();
+  statusEl.textContent="Solve the puzzle!";
+
+  // If puzzle starts with computer’s move, auto-play it
+  while(solutionMoves.length>0 && chess.turn()!==playerColor){
+    const compMove=solutionMoves.shift();
+    chess.move({from:compMove.from,to:compMove.to,promotion:'q'});
+    renderBoard();
+  }
+}
+
+const puzzles = [
+  {
+    fen: "8/8/8/5k2/5P2/8/6K1/8 w - - 0 1",
+    solution: [{from:"f4", to:"f5"}], // player moves
+    difficulty:"easy"
+  },
+  {
+    fen: "rnbqkbnr/pppp1ppp/8/8/8/3Q4/PPPP1PPP/RNB1KBNR b KQkq - 0 1",
+    solution: [
+      {from:"b8", to:"c6"},   // computer's move
+      {from:"d3", to:"d7"}    // player's winning move
+    ],
+    difficulty:"medium"
+  },
+  // Add more puzzles below
+];
+// ======================
+
+function renderBoard(){
+  boardEl.innerHTML='';
+  const bd = chess.board();
+  for(let r=0;r<8;r++){
+    for(let c=0;c<8;c++){
+      const sq = document.createElement('div');
+      sq.className='square '+((r+c)%2===0?'light':'dark');
+      const piece = bd[r][c];
+      if(piece) sq.textContent = piece.color==='w'?whitePieces[piece.type]:blackPieces[piece.type];
+      sq.dataset.square = 'abcdefgh'[c]+(8-r);
+      sq.onclick = ()=>onSquareClick(sq.dataset.square);
+      boardEl.appendChild(sq);
+    }
+  }
+}
+
+function highlightMoves(from){
+  [...boardEl.children].forEach(el=>el.classList.remove('selected','move','capture'));
+  const fromEl=[...boardEl.children].find(el=>el.dataset.square===from);
+  if(fromEl) fromEl.classList.add('selected');
+  const moves=chess.moves({square:from,verbose:true});
+  for(const m of moves){
+    const toEl=[...boardEl.children].find(el=>el.dataset.square===m.to);
+    if(!toEl) continue;
+    if(m.flags.includes('c')||m.flags.includes('e')) toEl.classList.add('capture');
+    else toEl.classList.add('move');
+  }
+}
+
+function onSquareClick(square){
+  if(chess.game_over()) return;
+  const moves = chess.moves({square,verbose:true});
+
+  if(selectedSquare){
+    const legal = chess.moves({square:selectedSquare,verbose:true}).some(m=>m.to===square);
+    if(legal){
+      const move = chess.move({from:selectedSquare,to:square,promotion:'q'});
+      selectedSquare = null;
+      renderBoard();
+
+      if(solutionMoves.length>0){
+        const expected = solutionMoves[0];
+        // Check if player's move matches expected
+        if(move.from === expected.from && move.to === expected.to){
+          solutionMoves.shift();
+          statusEl.textContent = solutionMoves.length===0 ? "✅ Puzzle solved!" : "Good! Next move...";
+
+          // Auto-play computer moves until it's player's turn
+          while(solutionMoves.length>0 && chess.turn()!=='w'){ // assume player is always white for simplicity
+            const compMove = solutionMoves.shift();
+            chess.move({from:compMove.from,to:compMove.to,promotion:'q'});
+            renderBoard();
+            statusEl.textContent = solutionMoves.length===0 ? "✅ Puzzle solved!" : "Your turn...";
+          }
+
+        } else {
+          statusEl.textContent = "❌ Incorrect move, try again.";
+          chess.undo();
+        }
+      }
+      return;
+    }
+  }
+
+  if(moves.length && moves[0].color===chess.turn()){
+    selectedSquare = square;
+    highlightMoves(selectedSquare);
+  }
+}
+
+function generatePuzzle(){
+  const difficulty = difficultyEl.value;
+  const filtered = puzzles.filter(p=>p.difficulty===difficulty);
+  if(filtered.length===0){ statusEl.textContent="No puzzles for this difficulty"; return; }
+  const puzzle = filtered[Math.floor(Math.random()*filtered.length)];
+  currentPuzzleFEN = puzzle.fen;
+  chess.load(puzzle.fen);
+  solutionMoves = puzzle.solution.slice();
+  renderBoard();
+  statusEl.textContent = "Solve the puzzle!";
+}
+
+function resetPuzzle(){
+  chess.load(currentPuzzleFEN);
+  selectedSquare=null;
+  renderBoard();
+  statusEl.textContent = "Solve the puzzle!";
+}
+
+// Event listeners
+document.getElementById('newPuzzle').addEventListener('click', generatePuzzle);
+document.getElementById('resetPuzzle').addEventListener('click', resetPuzzle);
+difficultyEl.addEventListener('change', generatePuzzle);
+
+// Initialize first puzzle
+generatePuzzle();
+</script>
+</body>
+</html>
