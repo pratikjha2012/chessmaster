@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auth Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .form-group { margin: 10px 0; }
+        input, button { padding: 10px; margin: 5px; }
+        .result { margin: 20px 0; padding: 10px; background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Authentication Test</h1>
+        
+        <h2>Register</h2>
+        <div class="form-group">
+            <input type="text" id="regUsername" placeholder="Username">
+            <input type="password" id="regPassword" placeholder="Password">
+            <button onclick="testRegister()">Register</button>
+        </div>
+        
+        <h2>Login</h2>
+        <div class="form-group">
+            <input type="text" id="loginUsername" placeholder="Username">
+            <input type="password" id="loginPassword" placeholder="Password">
+            <button onclick="testLogin()">Login</button>
+        </div>
+        
+        <h2>Profile (Protected)</h2>
+        <button onclick="testProfile()">Get Profile</button>
+        
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        function showResult(message) {
+            document.getElementById('result').innerHTML = message;
+        }
+
+        async function testRegister() {
+            const username = document.getElementById('regUsername').value;
+            const password = document.getElementById('regPassword').value;
+            
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                showResult(`Register: ${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                showResult(`Register Error: ${error.message}`);
+            }
+        }
+
+        async function testLogin() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    localStorage.setItem('token', data.token);
+                }
+                showResult(`Login: ${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                showResult(`Login Error: ${error.message}`);
+            }
+        }
+
+        async function testProfile() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                showResult('No token found. Please login first.');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/profile', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                showResult(`Profile: ${JSON.stringify(data, null, 2)}`);
+            } catch (error) {
+                showResult(`Profile Error: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>
